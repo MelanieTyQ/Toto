@@ -74,8 +74,11 @@ Be direct, data-driven, reference the actual headlines. No bullet points — flo
       }]
     })
   });
-  const data = await res.json();
-  return data.content?.map(b => b.text || "").join("\n") || "Analysis unavailable.";
+ const data = await res.json();
+console.log("Claude response:", data); // ← add this!
+if (data.error) return `Error: ${data.error.message}`;
+return data.content?.map(b => b.text || "").join("\n") 
+  || "Analysis unavailable.";
 }
 
 // ─── SPARKLINE GENERATOR ──────────────────────────────────────────────────────
