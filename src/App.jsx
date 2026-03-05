@@ -13,8 +13,11 @@ const FLASHPOINTS = [
 
 // Convert GDELT tone (-100 to +100, negative = bad) to tension score (0–100)
 function toneToTension(tone) {
-  // tone of -10 = ~85 tension; tone of 0 = ~50; tone of +5 = ~30
-  return Math.min(100, Math.max(5, Math.round((-tone + 8) * 4.2)));
+  // If tone is exactly 0 or no data → return neutral 50
+  if (!tone || tone === 0) return 50;
+  // tone -15 = ~95 (critical), -10 = ~85, -5 = ~70, 0 = ~50, +5 = ~30
+  const raw = Math.round(50 + (-tone * 3.2));
+  return Math.min(98, Math.max(15, raw));
 }
 
 function getAlertLevel(score) {
@@ -31,9 +34,12 @@ async function fetchGDELT(query) {
   if (!res.ok) throw new Error("GDELT fetch failed");
   const data = await res.json();
   const articles = data.articles || [];
-  if (articles.length === 0) return { score: 50, articles: [], avgTone: 0 };
-  const tones = articles.map(a => parseFloat(a.tone) || 0).filter(t => !isNaN(t));
-  const avgTone = tones.reduce((s, t) => s + t, 0) / (tones.length || 1);
+  if (articles.length === 0) return { score: 50, articles: [], avgTone: "N/A" };
+  // Filter out zero-tone articles for score calculation
+  const tones = articles.map(a => parseFloat(a.tone)).filter(t => !isNaN(t) && t !== 0);
+  const avgTone = tones.length > 0
+    ? tones.reduce((s, t) => s + t, 0) / tones.length
+    : 0;
   const score = toneToTension(avgTone);
   return { score, articles: articles.slice(0, 6), avgTone: avgTone.toFixed(2) };
 }
@@ -99,7 +105,7 @@ export default function TensionTracker() {
   const [error, setError]           = useState(null);
   const [apiKey, setApiKey]         = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [showKeyModal, setShowKeyModal] = useState(true);
+  const [showKeyModal, setShowKeyModal] = useState(false);
 
   // Clock + pulse
   useEffect(() => {
@@ -206,11 +212,19 @@ export default function TensionTracker() {
             <div style={{ fontSize: 9, letterSpacing: 4, color: "#ff3b3b", marginBottom: 16 }}>
               🔐 ANTHROPIC API KEY REQUIRED
             </div>
-            <div style={{ fontSize: 11, color: "#7a9eb8", lineHeight: 1.8, marginBottom: 20 }}>
-              This tracker uses Claude AI to analyze live GDELT headlines.<br/>
-              Enter your own Anthropic API key to enable AI briefings.<br/>
+            <div style={{ fontSize: 11, color: "#7a9eb8", lineHeight: 1.9, marginBottom: 20 }}>
+              This tracker uses <span style={{color:"#ff6b2b"}}>Claude AI</span> to analyze live GDELT headlines.<br/>
+              To enable AI briefings, enter your own Anthropic API key:<br/><br/>
+              <span style={{ fontSize: 10, color: "#5a8aaa" }}>
+                1. Go to <span style={{color:"#7a9eb8"}}>console.anthropic.com</span><br/>
+                2. Sign up for free<br/>
+                3. Click <span style={{color:"#7a9eb8"}}>API Keys → Create Key</span><br/>
+                4. Copy your <span style={{color:"#7a9eb8"}}>sk-ant-...</span> key<br/>
+                5. Paste below → click <span style={{color:"#ff3b3b"}}>ACTIVATE!</span>
+              </span><br/><br/>
               <span style={{ fontSize: 9, color: "#3a5a75" }}>
-                Get a free key at console.anthropic.com → API Keys
+                ✅ GDELT conflict data loads for FREE — no key needed!<br/>
+                ⚡ API key is only required for AI analysis briefings.
               </span>
             </div>
             <input
@@ -467,7 +481,23 @@ export default function TensionTracker() {
 
           {!selected && (
             <div style={{ color: "#1a3a55", fontSize: 11, letterSpacing: 3, textAlign: "center", paddingTop: 40 }}>
-              ↑ SELECT A FLASHPOINT ABOVE TO GENERATE LIVE AI BRIEFING
+              ↑ SELECT A FLASHPOINT ABOVE TO VIEW LIVE HEADLINES
+            </div>
+          )}
+
+          {selected && !apiKey && !analysisLoading && !analysis && (
+            <div style={{ textAlign: "center", paddingTop: 20 }}>
+              <div style={{ fontSize: 10, color: "#3a5a75", letterSpacing: 2, marginBottom: 12 }}>
+                🔑 ADD YOUR ANTHROPIC API KEY TO ENABLE AI BRIEFINGS
+              </div>
+              <button onClick={() => setShowKeyModal(true)} style={{
+                background: "rgba(255,59,59,0.1)", border: "1px solid rgba(255,59,59,0.3)",
+                color: "#ff3b3b", fontSize: 9, letterSpacing: 3, padding: "8px 20px",
+                cursor: "pointer", fontFamily: "inherit",
+              }}>🔑 ADD API KEY</button>
+              <div style={{ fontSize: 8, color: "#1a3a55", marginTop: 8 }}>
+                Get free key at console.anthropic.com
+              </div>
             </div>
           )}
 
@@ -532,4 +562,3 @@ export default function TensionTracker() {
     </div>
   );
 }
-
