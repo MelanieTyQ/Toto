@@ -3,12 +3,12 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart
 
 // ─── FLASHPOINT DEFINITIONS ─────────────────────────────────────────────────
 const FLASHPOINTS = [
-  { id: "us_iran",      label: "US–Iran",        query: "Iran United States military strike war",        region: "Middle East", color: "#ff3b3b" },
-  { id: "russia_nato",  label: "Russia–NATO",     query: "Russia NATO war Ukraine military escalation",   region: "Europe",      color: "#ff6b2b" },
-  { id: "china_taiwan", label: "China–Taiwan",    query: "China Taiwan military tension conflict",        region: "Pacific",     color: "#ffa500" },
-  { id: "india_pak",    label: "India–Pakistan",  query: "India Pakistan military tension nuclear",       region: "South Asia",  color: "#ffd700" },
-  { id: "israel_hamas", label: "Israel–Hamas",    query: "Israel Gaza Hamas war ceasefire",               region: "Middle East", color: "#ff6b2b" },
-  { id: "nkorea",       label: "N.Korea–West",    query: "North Korea nuclear missile launch threat",     region: "Pacific",     color: "#a0b8d0" },
+  { id: "us_iran",      label: "US–Iran",            query: "Iran United States Israel airstrike attack missile 2026",           region: "Middle East", color: "#ff3b3b" },
+  { id: "hormuz",       label: "Strait of Hormuz",   query: "Strait Hormuz oil tanker blockade shipping Iran closure 2026",      region: "Middle East", color: "#ff2222" },
+  { id: "russia_nato",  label: "Russia–NATO",        query: "Russia NATO Ukraine war escalation attack missile 2026",            region: "Europe",      color: "#ff6b2b" },
+  { id: "china_taiwan", label: "China–Taiwan",       query: "China Taiwan military invasion strait conflict 2026",               region: "Pacific",     color: "#ffa500" },
+  { id: "israel_hamas", label: "Israel–Iran",        query: "Israel Iran strike war retaliation attack nuclear 2026",            region: "Middle East", color: "#ff4444" },
+  { id: "nkorea",       label: "N.Korea–West",       query: "North Korea nuclear missile launch threat United States 2026",      region: "Pacific",     color: "#a0b8d0" },
 ];
 
 // Convert GDELT tone (-100 to +100, negative = bad) to tension score (0–100)
@@ -39,11 +39,16 @@ async function fetchGDELT(query) {
 }
 
 // ─── CLAUDE ANALYSIS ─────────────────────────────────────────────────────────
-async function fetchClaudeAnalysis(fp, articles, score) {
+async function fetchClaudeAnalysis(fp, articles, score, apiKey) {
   const headlines = articles.map(a => `- ${a.title} (${a.domain})`).join("\n");
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1000,
@@ -81,8 +86,8 @@ function generateSparkline(currentScore) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function TensionTracker() {
-  const [fpData, setFpData]         = useState({});       // { id: { score, articles, avgTone, sparkline } }
-  const [loadingFp, setLoadingFp]   = useState({});       // which FPs are loading
+  const [fpData, setFpData]         = useState({});
+  const [loadingFp, setLoadingFp]   = useState({});
   const [selected, setSelected]     = useState(null);
   const [analysis, setAnalysis]     = useState("");
   const [analysisLoading, setAnalysisLoading] = useState(false);
@@ -92,6 +97,9 @@ export default function TensionTracker() {
   const [globalScore, setGlobalScore] = useState(null);
   const [trendData, setTrendData]   = useState([]);
   const [error, setError]           = useState(null);
+  const [apiKey, setApiKey]         = useState("");
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [showKeyModal, setShowKeyModal] = useState(true);
 
   // Clock + pulse
   useEffect(() => {
@@ -148,17 +156,27 @@ export default function TensionTracker() {
 
   // Click flashpoint → get Claude analysis
   async function handleSelect(fp) {
+    if (!apiKey) { setShowKeyModal(true); return; }
     setSelected(fp);
     setAnalysis("");
     setAnalysisLoading(true);
     const d = fpData[fp.id];
     try {
-      const text = await fetchClaudeAnalysis(fp, d?.articles || [], d?.score || 50);
+      const text = await fetchClaudeAnalysis(fp, d?.articles || [], d?.score || 50, apiKey);
       setAnalysis(text);
     } catch {
-      setAnalysis("⚠ Could not fetch analysis. Check network or API key.");
+      setAnalysis("⚠ Could not fetch analysis. Check your API key.");
     }
     setAnalysisLoading(false);
+  }
+
+  function handleKeySubmit() {
+    if (apiKeyInput.startsWith("sk-ant-")) {
+      setApiKey(apiKeyInput);
+      setShowKeyModal(false);
+    } else {
+      alert("Invalid key — must start with sk-ant-");
+    }
   }
 
   const alert = getAlertLevel(globalScore ?? 50);
@@ -173,6 +191,61 @@ export default function TensionTracker() {
       color: "#b8ccd8",
       backgroundImage: "radial-gradient(ellipse at 15% 15%, rgba(0,50,110,0.18) 0%, transparent 55%), radial-gradient(ellipse at 85% 85%, rgba(110,0,0,0.12) 0%, transparent 55%), url(\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Crect x='0' y='0' width='1' height='40'/%3E%3Crect x='0' y='0' width='40' height='1'/%3E%3C/g%3E%3C/svg%3E\")",
     }}>
+
+      {/* ── API KEY MODAL ── */}
+      {showKeyModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 100,
+          background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            background: "#080f18", border: "1px solid rgba(255,59,59,0.3)",
+            padding: "36px 32px", maxWidth: 480, width: "90%",
+          }}>
+            <div style={{ fontSize: 9, letterSpacing: 4, color: "#ff3b3b", marginBottom: 16 }}>
+              🔐 ANTHROPIC API KEY REQUIRED
+            </div>
+            <div style={{ fontSize: 11, color: "#7a9eb8", lineHeight: 1.8, marginBottom: 20 }}>
+              This tracker uses Claude AI to analyze live GDELT headlines.<br/>
+              Enter your own Anthropic API key to enable AI briefings.<br/>
+              <span style={{ fontSize: 9, color: "#3a5a75" }}>
+                Get a free key at console.anthropic.com → API Keys
+              </span>
+            </div>
+            <input
+              type="password"
+              placeholder="sk-ant-api03-..."
+              value={apiKeyInput}
+              onChange={e => setApiKeyInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleKeySubmit()}
+              style={{
+                width: "100%", background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.1)", color: "#c8d8e8",
+                padding: "10px 12px", fontSize: 11, fontFamily: "inherit",
+                marginBottom: 12, boxSizing: "border-box", outline: "none",
+              }}
+            />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={handleKeySubmit} style={{
+                flex: 1, background: "rgba(255,59,59,0.15)",
+                border: "1px solid rgba(255,59,59,0.4)", color: "#ff3b3b",
+                padding: "10px", fontSize: 9, letterSpacing: 3,
+                cursor: "pointer", fontFamily: "inherit",
+              }}>ACTIVATE AI ANALYSIS</button>
+              <button onClick={() => setShowKeyModal(false)} style={{
+                background: "transparent", border: "1px solid rgba(255,255,255,0.08)",
+                color: "#3a5a75", padding: "10px 16px", fontSize: 9,
+                cursor: "pointer", fontFamily: "inherit", letterSpacing: 2,
+              }}>SKIP</button>
+            </div>
+            <div style={{ fontSize: 8, color: "#1a3a55", marginTop: 12, lineHeight: 1.6 }}>
+              ⚠ Your key is stored in memory only — never saved to any server.<br/>
+              GDELT data loads freely without a key.
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── TOPBAR ── */}
       <div style={{
         borderBottom: "1px solid rgba(255,59,59,0.25)",
@@ -211,6 +284,13 @@ export default function TensionTracker() {
             color: "#5a8aaa", fontSize: 9, letterSpacing: 2, padding: "4px 10px",
             cursor: "pointer",
           }}>↺ REFRESH</button>
+          <button onClick={() => setShowKeyModal(true)} style={{
+            background: apiKey ? "rgba(76,175,80,0.1)" : "rgba(255,59,59,0.1)",
+            border: `1px solid ${apiKey ? "rgba(76,175,80,0.3)" : "rgba(255,59,59,0.3)"}`,
+            color: apiKey ? "#4caf50" : "#ff3b3b",
+            fontSize: 9, letterSpacing: 2, padding: "4px 10px",
+            cursor: "pointer", fontFamily: "inherit",
+          }}>{apiKey ? "🔑 AI ACTIVE" : "🔑 SET API KEY"}</button>
         </div>
       </div>
 
@@ -452,3 +532,4 @@ export default function TensionTracker() {
     </div>
   );
 }
+
